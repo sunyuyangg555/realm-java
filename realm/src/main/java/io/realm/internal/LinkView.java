@@ -22,9 +22,9 @@ package io.realm.internal;
 public class LinkView {
 
     private final Context context;
-    private final long nativeLinkViewPtr;
-    private final Table parent;
-    private final long columnIndexInParent;
+    final long nativeLinkViewPtr;
+    final Table parent;
+    final long columnIndexInParent;
 
     public LinkView(Context context, Table parent, long columnIndexInParent, long nativeLinkViewPtr) {
         this.context = context;
@@ -34,9 +34,10 @@ public class LinkView {
     }
 
     public Row get(long pos) {
-        long nativeRowPtr = nativeGetRow(nativeLinkViewPtr, pos);
-        return new Row(context, parent.getLinkTarget(columnIndexInParent), nativeRowPtr);
+        return Row.get(context, this, pos);
     }
+
+    native long nativeGetRow(long nativeLinkViewPtr, long pos);
 
     public long getTargetRowIndex(long pos) {
         return nativeGetTargetRowIndex(nativeLinkViewPtr, pos);
