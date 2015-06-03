@@ -65,13 +65,13 @@ import java.util.List;
 public class TableView implements TableOrView, Closeable {
     protected boolean DEBUG = false; //true;
     private TableQuery query; // the query which created this TableView
-     /**
-     * Creates a TableView with already created Java TableView Object and a
-     * native native TableView object reference. The method is not supposed to
-     * be called by the user of the db. The method is for internal use only.
+
+    /**
+     * Creates a TableView. This constructor is used if the TableView is created from a table.
      *
-     * @param parent A table.
-     * @param nativePtr pointer to table.
+     * @param context
+     * @param parent
+     * @param nativePtr
      */
     protected TableView(Context context, Table parent, long nativePtr) {
         this.context = context;
@@ -79,6 +79,16 @@ public class TableView implements TableOrView, Closeable {
         this.nativePtr = nativePtr;
     }
 
+    /**
+     * Creates a TableView with already created Java TableView Object and a
+     * native native TableView object reference. The method is not supposed to
+     * be called by the user of the db. The method is for internal use only.
+     *
+     * @param context
+     * @param parent A table.
+     * @param nativePtr pointer to table view.
+     * @param query a reference to the query which the table view is based
+     */
     protected TableView(Context context, Table parent, long nativePtr, TableQuery query) {
         this(context, parent, nativePtr);
         this.query = query;

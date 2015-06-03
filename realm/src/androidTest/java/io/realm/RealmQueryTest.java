@@ -1,7 +1,6 @@
 package io.realm;
 
 import android.test.AndroidTestCase;
-import android.util.Log;
 
 import java.util.Date;
 
@@ -464,25 +463,18 @@ public class RealmQueryTest extends AndroidTestCase{
 
     private RealmResults<CatOwner> results = null;
     public void testModifyRealmListD() {
-        // If it doesn't crash, increase this
         final int count = 100;
-        // Enable the list for maintaining the reference will avoid crash!!!!!!!!!!!!!
-        //final ArrayList<RealmResults<CatOwner>> arrayList = new ArrayList<RealmResults<CatOwner>>();
 
         results = testRealm.where(CatOwner.class).findAll();
         RealmChangeListener listener = new RealmChangeListener() {
             @Override
             public void onChange() {
-                // Enable the list for maintaining the reference will avoid crash!!!!!!!!!!!!!
-                // arrayList.add(results);
                 results = results.where().notEqualTo("name", "asdfas" + count).findAll();
-                //assertEquals(count, results.size());
                 for (int i=0; i<count; i++) {
                     CatOwner catOwner = results.get(i);
                     assertEquals(catOwner.getName(), "catOwner"+i);
-                    Log.e("testModifyRealmListD", "loop count " + i);
                 }
-                System.gc();
+                System.gc(); // if a native resource has a reference count = 0, doing GC here might lead to a crash
             }
         };
         testRealm.addChangeListener(listener);
