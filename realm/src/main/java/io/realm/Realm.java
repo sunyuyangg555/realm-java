@@ -46,6 +46,9 @@ import java.util.Map;
 import java.util.Scanner;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import io.realm.exceptions.RealmException;
@@ -53,6 +56,7 @@ import io.realm.exceptions.RealmIOException;
 import io.realm.exceptions.RealmMigrationNeededException;
 import io.realm.internal.ColumnIndices;
 import io.realm.internal.ColumnType;
+import io.realm.internal.FinalizerRunnable;
 import io.realm.internal.ImplicitTransaction;
 import io.realm.internal.RealmObjectProxy;
 import io.realm.internal.RealmProxyMediator;
@@ -124,6 +128,9 @@ public final class Realm implements Closeable {
 
     private static final String TAG = "REALM";
     private static final String TABLE_PREFIX = "class_";
+    private static final ExecutorService executorService = Executors.newSingleThreadExecutor();
+    private static AtomicBoolean isFinalizerStarted = new AtomicBoolean(false);
+
     protected static final ThreadLocal<Map<String, Realm>> realmsCache = new ThreadLocal<Map<String, Realm>>() {
         @SuppressLint("UseSparseArrays")
         @Override
@@ -465,6 +472,10 @@ public final class Realm implements Closeable {
     }
 
     private static Realm create(File writableFolder, String filename, byte[] key) {
+        if (!isFinalizerStarted.get()) {
+            executorService.submit(new FinalizerRunnable());
+            isFinalizerStarted.set(true);
+        }
         checkValidRealmPath(writableFolder, filename);
         String canonicalPath = getCanonicalPath(new File(writableFolder, filename));
         if (Looper.myLooper() != null) {

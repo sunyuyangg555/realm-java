@@ -100,7 +100,6 @@ public class LinkView {
     }
 
     protected static native void nativeClose(long nativeLinkViewPtr);
-    private native long nativeGetRow(long nativeLinkViewPtr, long pos);
     private native long nativeGetTargetRowIndex(long nativeLinkViewPtr, long pos);
     private native void nativeAdd(long nativeLinkViewPtr, long rowIndex);
     private native void nativeInsert(long nativeLinkViewPtr, long pos, long rowIndex);
