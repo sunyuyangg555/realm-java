@@ -18,6 +18,7 @@ package io.realm.internal;
 
 import java.io.Closeable;
 import java.util.Date;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import io.realm.exceptions.RealmException;
 
@@ -49,7 +50,7 @@ public class Table implements TableOrView, TableSchema, Closeable {
     // test:
     protected int tableNo;
     protected boolean DEBUG = false;
-    protected static int TableCount = 0;
+    static AtomicInteger tableCount = new AtomicInteger(0);
 
     static {
         RealmCore.loadLibrary();
@@ -72,7 +73,7 @@ public class Table implements TableOrView, TableSchema, Closeable {
             throw new java.lang.OutOfMemoryError("Out of native memory.");
         }
         if (DEBUG) {
-            tableNo = ++TableCount;
+            tableNo = tableCount.incrementAndGet();
             System.err.println("====== New Tablebase " + tableNo + " : ptr = " + nativePtr);
         }
     }
@@ -85,7 +86,7 @@ public class Table implements TableOrView, TableSchema, Closeable {
         this.nativePtr = nativePointer;
 
         if (DEBUG) {
-            tableNo = ++TableCount;
+            tableNo = tableCount.incrementAndGet();
             System.err.println("===== New Tablebase(ptr) " + tableNo + " : ptr = " + nativePtr);
         }
     }
@@ -103,8 +104,8 @@ public class Table implements TableOrView, TableSchema, Closeable {
             if (nativePtr != 0) {
                 nativeClose(nativePtr);
                 if (DEBUG) {
-                    TableCount--;
-                    System.err.println("==== CLOSE " + tableNo + " ptr= " + nativePtr + " remaining " + TableCount);
+                    tableCount.decrementAndGet();
+                    System.err.println("==== CLOSE " + tableNo + " ptr= " + nativePtr + " remaining " + tableCount.get());
                 }
                 
                 nativePtr = 0;
@@ -136,30 +137,10 @@ public class Table implements TableOrView, TableSchema, Closeable {
      */
 
     public boolean isValid() {
-        if (nativePtr == 0)
-            return false;
-        return nativeIsValid(nativePtr);
+        return nativePtr != 0 && nativeIsValid(nativePtr);
     }
 
     protected native boolean nativeIsValid(long nativeTablePtr);
-
-    @Override
-    public boolean equals(Object other) {
-        if (this == other) {
-            return true;
-        }
-        if (other == null) {
-            return false;
-        }
-        if (!(other instanceof Table)) {
-            return false; // Has to work for all the typed tables as well
-        }
-
-        Table otherTable = (Table) other;
-        return nativeEquals(nativePtr, otherTable.nativePtr);
-    }
-
-    protected native boolean nativeEquals(long nativeTablePtr, long nativeTableToComparePtr);
 
     private void verifyColumnName(String name) {
         if (name.length() > 63) {
@@ -169,7 +150,7 @@ public class Table implements TableOrView, TableSchema, Closeable {
 
     @Override
     public TableSchema getSubtableSchema(long columnIndex) {
-        if(nativeIsRootTable(nativePtr) == false) {
+        if(!nativeIsRootTable(nativePtr)) {
             throw new UnsupportedOperationException("This is a subtable. Can only be called on root table.");
         }
 
@@ -415,7 +396,7 @@ public class Table implements TableOrView, TableSchema, Closeable {
             case INTEGER:
                 long pkValue;
                 try {
-                    pkValue = new Long(primaryKeyValue.toString());
+                    pkValue = Long.parseLong(primaryKeyValue.toString());
                 } catch (RuntimeException e) {
                     throw new IllegalArgumentException("Primary key value is not a long: " + primaryKeyValue);
                 }
@@ -517,10 +498,10 @@ public class Table implements TableOrView, TableSchema, Closeable {
                 nativeInsertLong(nativePtr, columnIndex, rowIndex, intValue);
                 break;
             case FLOAT:
-                nativeInsertFloat(nativePtr, columnIndex, rowIndex, ((Float)value).floatValue());
+                nativeInsertFloat(nativePtr, columnIndex, rowIndex, (Float) value);
                 break;
             case DOUBLE:
-                nativeInsertDouble(nativePtr, columnIndex, rowIndex, ((Double)value).doubleValue());
+                nativeInsertDouble(nativePtr, columnIndex, rowIndex, (Double) value);
                 break;
             case STRING:
                 String stringValue = (String) value;
@@ -638,12 +619,11 @@ public class Table implements TableOrView, TableSchema, Closeable {
                     ") does not match the number of columns in the table (" +
                     String.valueOf(columns) + ").");
         }
+
         // Verify type of 'values'
-        ColumnType colTypes[] = new ColumnType[columns];
         for (int columnIndex = 0; columnIndex < columns; columnIndex++) {
             Object value = values[columnIndex];
             ColumnType colType = getColumnType(columnIndex);
-            colTypes[columnIndex] = colType;
             if (!colType.matchObject(value)) {
                 throw new IllegalArgumentException("Invalid argument no " + String.valueOf(1 + columnIndex) +
                         ". Expected a value compatible with column type " + colType + ", but got " + value.getClass() + ".");
@@ -695,10 +675,7 @@ public class Table implements TableOrView, TableSchema, Closeable {
      * @return              True if column is a primary key, false otherwise.
      */
     public boolean isPrimaryKey(long columnIndex) {
-        if (columnIndex < 0) {
-            return false;
-        }
-        return columnIndex == getPrimaryKey();
+        return columnIndex >= 0 && columnIndex == getPrimaryKey();
     }
 
     /**
@@ -1181,8 +1158,7 @@ public class Table implements TableOrView, TableSchema, Closeable {
         if (pkTable == null) {
             throw new RealmException("Primary keys are only supported if Table is part of a Group");
         }
-        long index = nativeSetPrimaryKey(pkTable.nativePtr, nativePtr, columnName);
-        cachedPrimaryKeyColumnIndex = index;
+        cachedPrimaryKeyColumnIndex = nativeSetPrimaryKey(pkTable.nativePtr, nativePtr, columnName);
     }
 
     private native long nativeSetPrimaryKey(long privateKeyTableNativePtr, long nativePtr, String columnName);
@@ -1654,4 +1630,18 @@ public class Table implements TableOrView, TableSchema, Closeable {
     private void throwImmutable() {
         throw new IllegalStateException("Changing Realm data can only be done from inside a transaction.");
     }
+
+    /**
+     * Compares the schema of the current instance of Table with another instance.
+     * @param table The instance to compare with. It cannot be null.
+     * @return true if the two instances have the same schema (column names and types)
+     */
+    public boolean hasSameSchema(Table table) {
+        if (table == null) {
+            throw new IllegalArgumentException("The argument cannot be null");
+        }
+        return nativeHasSameSchema(this.nativePtr, table.nativePtr);
+    }
+
+    protected native boolean nativeHasSameSchema(long thisTable, long otherTable);
 }

@@ -55,10 +55,12 @@ import io.realm.internal.modules.FilterableMediator;
  */
 public class RealmConfiguration {
 
+    public static final int KEY_LENGTH = 64;
+
     private static final Object DEFAULT_MODULE;
     private static final RealmProxyMediator DEFAULT_MODULE_MEDIATOR;
     static {
-        DEFAULT_MODULE = getDefaultModule();
+        DEFAULT_MODULE = Realm.getDefaultModule();
         if (DEFAULT_MODULE != null) {
             DEFAULT_MODULE_MEDIATOR = getModuleMediator(DEFAULT_MODULE.getClass().getCanonicalName());
         } else {
@@ -173,26 +175,6 @@ public class RealmConfiguration {
         return mediator;
     }
 
-    // Finds the default module (if there is one)
-    private static Object getDefaultModule() {
-        String moduleName = "io.realm.DefaultRealmModule";
-        Class<?> clazz;
-        try {
-            clazz = Class.forName(moduleName);
-            Constructor<?> constructor = clazz.getDeclaredConstructors()[0];
-            constructor.setAccessible(true);
-            return constructor.newInstance();
-        } catch (ClassNotFoundException e) {
-            return null;
-        } catch (InvocationTargetException e) {
-            throw new RealmException("Could not create an instance of " + moduleName, e);
-        } catch (InstantiationException e) {
-            throw new RealmException("Could not create an instance of " + moduleName, e);
-        } catch (IllegalAccessException e) {
-            throw new RealmException("Could not create an instance of " + moduleName, e);
-        }
-    }
-
     // Finds the mediator associated with a given module
     private static RealmProxyMediator getModuleMediator(String fullyQualifiedModuleClassName) {
         String[] moduleNameParts = fullyQualifiedModuleClassName.split("\\.");
@@ -296,8 +278,9 @@ public class RealmConfiguration {
             if (key == null) {
                 throw new IllegalArgumentException("A non-null key must be provided");
             }
-            if (key.length != 64) {
-                throw new IllegalArgumentException("The provided key must be 64 bytes. Yours was: " + key.length);
+            if (key.length != KEY_LENGTH) {
+                throw new IllegalArgumentException(String.format("The provided key must be %s bytes. Yours was: %s",
+                        KEY_LENGTH, key.length));
             }
             this.key = key;
             return this;
@@ -345,29 +328,21 @@ public class RealmConfiguration {
         }
 
         /**
-         * Add a {@link RealmModule}s to the existing modules. RealmClasses in the new module is added to the schema
-         * for this Realm.
-         *
-         * @param module {@link RealmModule} to add to this Realms schema.
-         *
-         * @throws {@link IllegalArgumentException} if module is {@code null} or doesn't have the {@link RealmModule}
-         * annotation.
-         */
-        public Builder addModule(Object module) {
-            checkModule(module);
-            modules.add(module);
-            return this;
-        }
-
-        /**
-         * Replace the existing module(s) with one or more {@link RealmModule}s. Using this method will replace the
+         * Replaces the existing module(s) with one or more {@link RealmModule}s. Using this method will replace the
          * current schema for this Realm with the schema defined by the provided modules.
          *
-         * @param baseModule
-         * @param additionalModules
+         * A reference to the default Realm module containing all Realm classes in the project (but not dependencies),
+         * can be found using {@link Realm#getDefaultModule()}. Combining the schema from the app project and a library
+         * dependency is thus done using the following code:
+         *
+         * {@code builder.setModules(Realm.getDefaultMode(), new MyLibraryModule()); }
+         *
+         * @param baseModule        First Realm module (required).
+         * @param additionalModules Additional Realm modules
          *
          * @throws {@link IllegalArgumentException} if any of the modules are {@code null} or doesn't have the
          * {@link RealmModule} annotation.
+         * @see Realm#getDefaultModule()
          */
         public Builder setModules(Object baseModule, Object... additionalModules) {
             modules.clear();
@@ -382,17 +357,27 @@ public class RealmConfiguration {
             return this;
         }
 
+        private void addModule(Object module) {
+            checkModule(module);
+            modules.add(module);
+        }
+
         /**
          * DEBUG method. This restricts the Realm schema to only consist of the provided classes without having to
          * create a module. These classes must be available in the default module. Calling this will remove any
          * previously configured modules.
          */
-        Builder schema(Class<? extends RealmObject>... schemaClass) {
+        Builder schema(Class<? extends RealmObject> firstClass, Class<? extends RealmObject>... additionalClasses) {
+            if (firstClass == null) {
+                throw new IllegalArgumentException("A non-null class must be provided");
+            }
             modules.clear();
             modules.add(DEFAULT_MODULE_MEDIATOR);
-            if (schemaClass != null) {
-                Collections.addAll(debugSchema, schemaClass);
+            debugSchema.add(firstClass);
+            if (additionalClasses != null) {
+                Collections.addAll(debugSchema, additionalClasses);
             }
+
             return this;
         }
 

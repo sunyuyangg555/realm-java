@@ -34,6 +34,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.lang.ref.WeakReference;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -504,7 +506,7 @@ public final class Realm implements Closeable {
     }
 
     /**
-     * Set the {@link io.realm.RealmConfiguration} used when calling {@link #getDefaultInstance()}
+     * Sets the {@link io.realm.RealmConfiguration} used when calling {@link #getDefaultInstance()}
      *
      * @param configuration RealmConfiguration to use as the default configuration
      * @see {@link io.realm.RealmConfiguration} for details on how to configure a Realm
@@ -1079,7 +1081,8 @@ public final class Realm implements Closeable {
 
     /**
      * Copies a RealmObject to the Realm instance and returns the copy. Any further changes to the original RealmObject
-     * will not be reflected in the Realm copy.
+     * will not be reflected in the Realm copy. This is a deep copy, so all referenced objects will be copied. Objects
+     * already in this Realm will be ignored.
      *
      * @param object {@link io.realm.RealmObject} to copy to the Realm.
      * @return A managed RealmObject with its properties backed by the Realm.
@@ -1093,7 +1096,8 @@ public final class Realm implements Closeable {
 
     /**
      * Updates an existing RealmObject that is identified by the same {@link io.realm.annotations.PrimaryKey} or create
-     * a new copy if no existing object could be found.
+     * a new copy if no existing object could be found. This is a deep copy or update, so all referenced objects will be
+     * either copied or updated.
      *
      * @param object    {@link io.realm.RealmObject} to copy or update.
      * @return The new or updated RealmObject with all its properties backed by the Realm.
@@ -1109,7 +1113,8 @@ public final class Realm implements Closeable {
 
     /**
      * Copies a collection of RealmObjects to the Realm instance and returns their copy. Any further changes
-     * to the original RealmObjects will not be reflected in the Realm copies.
+     * to the original RealmObjects will not be reflected in the Realm copies. This is a deep copy, so all referenced
+     * objects will be copied. Objects already in this Realm will be ignored.
      *
      * @param objects RealmObjects to copy to the Realm.
      * @return A list of the the converted RealmObjects that all has their properties managed by the Realm.
@@ -1132,7 +1137,8 @@ public final class Realm implements Closeable {
 
     /**
      * Updates a list of existing RealmObjects that is identified by their {@link io.realm.annotations.PrimaryKey} or create a
-     * new copy if no existing object could be found.
+     * new copy if no existing object could be found. This is a deep copy or update, so all referenced objects will be
+     * either copied or updated.
      *
      * @param objects   List of objects to update or copy into Realm.
      * @return A list of all the new or updated RealmObjects.
@@ -1352,18 +1358,22 @@ public final class Realm implements Closeable {
 
     void sendNotifications() {
         Iterator<WeakReference<RealmChangeListener>> iterator = changeListeners.iterator();
-        List<WeakReference<RealmChangeListener>> toRemoveList =
-                new ArrayList<WeakReference<RealmChangeListener>>(changeListeners.size());
+        List<WeakReference<RealmChangeListener>> toRemoveList = null;
         while (iterator.hasNext()) {
             WeakReference<RealmChangeListener> weakRef = iterator.next();
             RealmChangeListener listener = weakRef.get();
             if (listener == null) {
+                if (toRemoveList == null) {
+                    toRemoveList = new ArrayList<WeakReference<RealmChangeListener>>(changeListeners.size());
+                }
                 toRemoveList.add(weakRef);
             } else {
                 listener.onChange();
             }
         }
-        changeListeners.removeAll(toRemoveList);
+        if (toRemoveList != null) {
+            changeListeners.removeAll(toRemoveList);
+        }
     }
 
     @SuppressWarnings("UnusedDeclaration")
@@ -1797,6 +1807,35 @@ public final class Realm implements Closeable {
             throw new RealmException("Could not resolve the canonical path to the Realm file: " + realmFile.getAbsolutePath());
         }
     }
+
+    /**
+     * Returns the default Realm module. This module contains all Realm classes in the current project, but not
+     * those from library or project dependencies. Realm classes in these should be exposed using their own module.
+     *
+     * @return The default Realm module or null if no default module exists.
+     * @see io.realm.RealmConfiguration.Builder#setModules(Object, Object...)
+     */
+    public static Object getDefaultModule() {
+        String moduleName = "io.realm.DefaultRealmModule";
+        Class<?> clazz;
+        try {
+            clazz = Class.forName(moduleName);
+            Constructor<?> constructor = clazz.getDeclaredConstructors()[0];
+            constructor.setAccessible(true);
+            return constructor.newInstance();
+        } catch (ClassNotFoundException e) {
+            return null;
+        } catch (InvocationTargetException e) {
+            throw new RealmException("Could not create an instance of " + moduleName, e);
+        } catch (InstantiationException e) {
+            throw new RealmException("Could not create an instance of " + moduleName, e);
+        } catch (IllegalAccessException e) {
+            throw new RealmException("Could not create an instance of " + moduleName, e);
+        }
+    }
+
+
+
 
     /**
      * Encapsulates a Realm transaction.

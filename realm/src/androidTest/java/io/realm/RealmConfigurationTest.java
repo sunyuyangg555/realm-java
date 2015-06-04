@@ -105,10 +105,17 @@ public class RealmConfigurationTest extends AndroidTestCase {
     }
 
     public void testWrongKeyLengthThrows() {
-        try {
-            new RealmConfiguration.Builder(getContext()).encryptionKey(new byte[63]).build();
-            fail();
-        } catch (IllegalArgumentException expected) {
+        byte[][] wrongKeys = new byte[][] {
+                new byte[0],
+                new byte[RealmConfiguration.KEY_LENGTH - 1],
+                new byte[RealmConfiguration.KEY_LENGTH + 1]
+        };
+        for (byte[] key : wrongKeys) {
+            try {
+                new RealmConfiguration.Builder(getContext()).encryptionKey(key).build();
+                fail("Key with length " + key.length + " should throw an exception");
+            } catch (IllegalArgumentException expected) {
+            }
         }
     }
 
@@ -124,10 +131,13 @@ public class RealmConfigurationTest extends AndroidTestCase {
         realm = Realm.getInstance(new RealmConfiguration.Builder(getContext()).schemaVersion(42).build());
         realm.close();
 
-        try {
-            Realm.getInstance(new RealmConfiguration.Builder(getContext()).schemaVersion(1).build());
-            fail();
-        } catch (IllegalArgumentException expected) {
+        int[] wrongVersions = new int[] { 0, 1, 41 };
+        for (int version : wrongVersions) {
+            try {
+                Realm.getInstance(new RealmConfiguration.Builder(getContext()).schemaVersion(version).build());
+                fail("Version " + version + " should throw an exception");
+            } catch (IllegalArgumentException expected) {
+            }
         }
     }
 
@@ -163,28 +173,6 @@ public class RealmConfigurationTest extends AndroidTestCase {
         }
     }
 
-    public void testAddModuleNullThrows() {
-        try {
-            new RealmConfiguration.Builder(getContext()).addModule(null);
-            fail();
-        } catch (IllegalArgumentException expected) {
-        }
-    }
-
-    public void testAddModuleNonRealmModuleThrows() {
-        try {
-            new RealmConfiguration.Builder(getContext()).addModule(new Object());
-            fail();
-        } catch (IllegalArgumentException expected) {
-        }
-    }
-
-    public void testAddModule() {
-        RealmConfiguration realmConfig = new RealmConfiguration.Builder(getContext()).addModule(new DefaultRealmModule()).build();
-        realm = Realm.getInstance(realmConfig);
-        assertNotNull(realm.getTable(AllTypes.class));
-    }
-
     public void testSetModulesNullThrows() {
         // Test first argument
         try {
@@ -195,7 +183,7 @@ public class RealmConfigurationTest extends AndroidTestCase {
 
         // Test second argument
         try {
-            new RealmConfiguration.Builder(getContext()).setModules(new DefaultRealmModule(), null, null);
+            new RealmConfiguration.Builder(getContext()).setModules(Realm.getDefaultModule(), null, null);
             fail();
         } catch (IllegalArgumentException expected) {
         }
@@ -211,14 +199,14 @@ public class RealmConfigurationTest extends AndroidTestCase {
 
         // Test second argument
         try {
-            new RealmConfiguration.Builder(getContext()).setModules(new DefaultRealmModule(), new Object());
+            new RealmConfiguration.Builder(getContext()).setModules(Realm.getDefaultModule(), new Object());
             fail();
         } catch (IllegalArgumentException expected) {
         }
     }
 
     public void testSetModules() {
-        RealmConfiguration realmConfig = new RealmConfiguration.Builder(getContext()).addModule(new DefaultRealmModule()).build();
+        RealmConfiguration realmConfig = new RealmConfiguration.Builder(getContext()).setModules(Realm.getDefaultModule()).build();
         realm = Realm.getInstance(realmConfig);
         assertNotNull(realm.getTable(AllTypes.class));
     }
